@@ -189,13 +189,16 @@ class BayesianOptimization(BO):
         if self.f is None and (self.X is None or self.Y is None):
             raise InvalidConfigError("Initial data for both X and Y is required when objective function is not provided")
 
+
         # Case 1:
         if self.X is None:
             self.X = initial_design(self.initial_design_type, self.space, self.initial_design_numdata)
-            self.Y, _ = self.objective.evaluate(self.X)
+            self.design_ids = list(range(self.X.shape[0]))
+            self.Y, _ = self.objective.evaluate(self.X, self.design_ids)
         # Case 2
         elif self.X is not None and self.Y is None:
-            self.Y, _ = self.objective.evaluate(self.X)
+            self.design_ids = list(range(self.X.shape[0]))
+            self.Y, _ = self.objective.evaluate(self.X, self.design_ids)
 
     def _sign(self,f):
          if self.maximize:

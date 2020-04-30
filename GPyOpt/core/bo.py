@@ -130,6 +130,8 @@ class BO(object):
         self.suggested_sample = self.X
         self.Y_new = self.Y
 
+        self.iter_counter = self.X.shape[0]
+
         # --- Initialize time cost of the evaluations
         while (self.max_time > self.cum_time):
             # --- Update model
@@ -143,6 +145,10 @@ class BO(object):
                 break
 
             self.suggested_sample = self._compute_next_evaluations()
+            self.design_ids = []
+            for i in range(self.suggested_sample.shape[0]):
+                self.design_ids.append(self.iter_counter)
+                self.iter_counter += 1
 
             # --- Augment X
             self.X = np.vstack((self.X,self.suggested_sample))
@@ -194,7 +200,7 @@ class BO(object):
         """
         Evaluates the objective
         """
-        self.Y_new, cost_new = self.objective.evaluate(self.suggested_sample)
+        self.Y_new, cost_new = self.objective.evaluate(self.suggested_sample, self.design_ids)
         self.cost.update_cost_model(self.suggested_sample, cost_new)
         self.Y = np.vstack((self.Y,self.Y_new))
 

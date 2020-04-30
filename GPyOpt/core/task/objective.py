@@ -7,13 +7,14 @@ from ...util.general import spawn
 from ...util.general import get_d_moments
 import GPy
 import GPyOpt
+import sys
 
 class Objective(object):
     """
     General class to handle the objective function internally.
     """
 
-    def evaluate(self, x):
+    def evaluate(self, x, design_ids):
         raise NotImplementedError()
 
 
@@ -41,27 +42,27 @@ class SingleObjective(Objective):
         self.objective_name = objective_name
 
 
-    def evaluate(self, x):
+    def evaluate(self, x, design_ids):
         """
         Performs the evaluation of the objective at x.
         """
 
         if self.n_procs == 1:
-            f_evals, cost_evals = self._eval_func(x)
+            f_evals, cost_evals = self._eval_func((x, design_ids[0]))
         else:
             try:
-                f_evals, cost_evals = self._syncronous_batch_evaluation(x)
+                f_evals, cost_evals = self._syncronous_batch_evaluation(x, design_ids)
             except:
-                if not hasattr(self, 'parallel_error'):
-                    print('Error in parallel computation. Fall back to single process!')
-                else:
-                    self.parallel_error = True
-                f_evals, cost_evals = self._eval_func(x)
+                raise
+                # if not hasattr(self, 'parallel_error'):
+                #     print('Error in parallel computation. Fall back to single process!')
+                # else:
+                #     self.parallel_error = True
+                # f_evals, cost_evals = self._eval_func((x, design_ids[0]))
 
         return f_evals, cost_evals
 
-
-    def _eval_func(self, x):
+    def _old_eval_func(self, x):
         """
         Performs sequential evaluations of the function at x (single location or batch). The computing time of each
         evaluation is also provided.
@@ -76,8 +77,20 @@ class SingleObjective(Objective):
             cost_evals += [time.time()-st_time]
         return f_evals, cost_evals
 
+    def _eval_func(self, params):
+        """
+        Performs sequential evaluations of the function at x (single location). The computing time of the
+        evaluation is also provided.
+        """
+        x = params[0]
+        design_id = params[1]
 
-    def _syncronous_batch_evaluation(self,x):
+        st_time    = time.time()
+        f_eval = self.func((np.atleast_2d(x), design_id))
+        cost_eval = np.array([[time.time()-st_time]])
+        return f_eval, cost_eval
+
+    def _old_syncronous_batch_evaluation(self,x):
         """
         Evaluates the function a x, where x can be a single location or a batch. The evaluation is performed in parallel
         according to the number of accessible cores.
@@ -99,6 +112,28 @@ class SingleObjective(Objective):
             f_evals[i::self.n_procs] = p.recv()[0] # throw away costs
             i += 1
         return f_evals, cost_evals
+
+    def _syncronous_batch_evaluation(self, x, design_ids):
+        """
+        Evaluates the function a x, where x can be a single location or a batch. The evaluation is performed in parallel
+        according to the number of accessible cores.
+        """
+        from multiprocessing import Pool
+
+        # --- parallel evaluation of the function
+        # divided_samples = [x[i::self.n_procs] for i in range(self.n_procs)]
+        divided_samples = list(zip(list(x), design_ids))
+        pool = Pool(self.n_procs)
+        results = pool.map(self._eval_func, divided_samples)
+
+        f_evals = [x[0] for x in results]
+        cost_evals = [x[1] for x in results]
+
+        f_evals = np.vstack(f_evals)
+        cost_evals = np.vstack(cost_evals)
+
+        return f_evals, cost_evals
+
 
     def _asyncronous_batch_evaluation(self,x):
 
